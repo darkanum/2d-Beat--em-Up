@@ -12,6 +12,7 @@ public class Char2dController : MonoBehaviour
     SpriteRenderer m_spriteRenderer;
     Rigidbody2D m_rigidBody;
     bool canJump = true;
+    bool canWallJump = false;
 
     [SerializeField]
     float speed;
@@ -25,31 +26,32 @@ public class Char2dController : MonoBehaviour
         m_rigidBody = gameObject.GetComponent<Rigidbody2D>();
         m_spriteRenderer = gameObject.GetComponent<SpriteRenderer>();
         animator = gameObject.GetComponent<Animator>();
-        
+
     }
 
     // Update is called once per frame
-    void FixedUpdate()
+    private void FixedUpdate()
     {
-        RaycastHit2D hit = Physics2D.Raycast(transform.position + (m_spriteRenderer.flipX ? new Vector3(-1, 0, 0) : new Vector3(1, 0, 0)),
+        RaycastHit2D hit = Physics2D.Raycast(transform.position + (m_spriteRenderer.flipX ? new Vector3(-0.8f, -1.2f, 0) : new Vector3(0.8f, -1.2f, 0)),
                 m_spriteRenderer.flipX ? Vector2.left : Vector2.right, raycastDistance);
+
 
         if (Input.GetButtonDown("Jump") && canJump)
         {
             Jump();
         }
 
-        if(Input.GetAxis("Horizontal") != 0)
+        if (Input.GetAxis("Horizontal") != 0)
         {
             m_rigidBody.velocity = new Vector2(Input.GetAxis("Horizontal") * runSpeed, m_rigidBody.velocity.y);
-                m_spriteRenderer.flipX = Input.GetAxis("Horizontal") > 0 ? false :
-                    (Input.GetAxis("Horizontal") < 0 ? true : m_spriteRenderer.flipX);
-                movementFoward = !m_spriteRenderer.flipX;
-           
+            m_spriteRenderer.flipX = Input.GetAxis("Horizontal") > 0 ? false :
+                (Input.GetAxis("Horizontal") < 0 ? true : m_spriteRenderer.flipX);
+            movementFoward = !m_spriteRenderer.flipX;
+
         }
 
 
-        animator.SetFloat("speed", Mathf.Abs( m_rigidBody.velocity.x));
+        animator.SetFloat("speed", Mathf.Abs(m_rigidBody.velocity.x));
         animator.SetFloat("ySpeed", m_rigidBody.velocity.y);
         speed = m_rigidBody.velocity.x;
 
@@ -58,53 +60,70 @@ public class Char2dController : MonoBehaviour
             Punch();
         }
 
-        if (!canJump )
-        {            
+        if (!canJump && canWallJump)
+        {
             if (hit.collider != null && hit.collider.tag != "Player")
-            {                
-                if (Input.GetKeyDown(KeyCode.V)){
+            {
+                if (Input.GetButtonDown("Jump"))
+                {
                     WallJump(hit);
                 }
-               
+
             }
         }
 
-        if(hit.collider != null){
-            if(Input.GetAxis("Horizontal") < 0 && m_rigidBody.velocity.x <0 || Input.GetAxis("Horizontal") > 0 && m_rigidBody.velocity.x > 0)
+        if (hit.collider != null && hit.collider.tag != "ground") {
+            if (Input.GetAxis("Horizontal") < 0 && m_rigidBody.velocity.x < 0 || Input.GetAxis("Horizontal") > 0 && m_rigidBody.velocity.x > 0)
                 m_rigidBody.velocity = new Vector2(0, m_rigidBody.velocity.y);
         }
     }
 
-    void Punch()
+    private IEnumerator JumpDelay()
+    {
+        yield return new WaitForFixedUpdate();
+        canWallJump = true;
+    }
+
+    private void Punch()
     {
         if (!animator.GetBool("punch"))
             animator.SetBool("punch", true);
         else
             animator.SetBool("combo", true);
         //animator.SetBool("punch", true);
-        m_rigidBody.AddForce(m_spriteRenderer.flipX ? Vector2.left * 200 : Vector2.right *200);
+        m_rigidBody.AddForce(m_spriteRenderer.flipX ? Vector2.left * 200 : Vector2.right * 200);
     }
 
-    void EndPunch()
+    public void EndPunch()
     {
         animator.SetBool("punch", false);
         animator.SetBool("combo", false);
     }
 
-    void Jump()
+    private void Jump()
     {
         canJump = false;
         yPos = transform.position.y;
         m_rigidBody.AddForce(new Vector2(0.0f, jumpSpeed), ForceMode2D.Impulse);
         animator.SetBool("jumping", true);
-
+        StartCoroutine(JumpDelay());
     }
 
-    void WallJump(RaycastHit2D hit)
+    private void WallJump(RaycastHit2D hit)
     {
+        animator.SetBool("walljump", true);
         //m_rigidBody.AddForce(new Vector2(10*hit.normal.x, jumpSpeed), ForceMode2D.Impulse);
-        m_rigidBody.velocity = new Vector2(10*hit.normal.x, jumpSpeed);
-        Debug.Log("can wall jump");
+        m_rigidBody.velocity = new Vector2(0, jumpSpeed);
+        m_spriteRenderer.flipX = hit.normal.x < 0 ? true : false;
+        m_rigidBody.AddForce(new Vector2(10 * hit.normal.x, 0), ForceMode2D.Impulse);
+        //Debug.Log("can wall jump");
+        StartCoroutine(ResetWallJump());
+    }
+
+    private IEnumerator ResetWallJump()
+    {
+        yield return new WaitForSeconds(0.1f); 
+        animator.SetBool("walljump", false);
     }
 
     private void OnCollisionEnter2D(Collision2D collision)
@@ -112,6 +131,7 @@ public class Char2dController : MonoBehaviour
         if (collision.transform.tag == "ground")
         {
             canJump = true;
+            canWallJump = false;
             animator.SetBool("jumping", false);
         }
     }
@@ -128,7 +148,8 @@ public class Char2dController : MonoBehaviour
     {
         Gizmos.color = Color.green;
 
-        Gizmos.DrawLine(!movementFoward ? transform.position + new Vector3(-1, 0, 0) : transform.position + new Vector3(1, 0, 0), transform.position + (
+        Gizmos.DrawLine(!movementFoward ? transform.position + new Vector3(-0.8f, -1.2f, 0) : transform.position + new Vector3(0.8f, -1.2f, 0),
+            !movementFoward ? transform.position + new Vector3(-1, -1.2f, 0) : transform.position + new Vector3(1, -1.2f, 0) + (
                 !movementFoward ? Vector3.left + new Vector3(-1,0,0) : Vector3.right + new Vector3(1,0,0)) * raycastDistance);
     }
 }
